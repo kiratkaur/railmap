@@ -1,0 +1,6 @@
+{
+  "name": "New York Railmap",
+  "description": "An interactive railway network visualization and route finding app for New York City.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
