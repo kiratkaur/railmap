@@ -141,7 +141,8 @@ function AppContent() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch('/api/stations')
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    fetch(`${apiUrl}/api/stations`)
       .then(r => r.ok ? r.json() : r.json().then(b => { throw new Error(b.error || 'Failed'); }))
       .then((data: NetworkData) => setNetwork(data))
       .catch((err: any) => setError(err.message))
@@ -162,7 +163,8 @@ function AppContent() {
     if (!originId || !destId) return;
     const reqId = ++routeReqRef.current;
     setRouting(true);
-    fetch(`/api/route?origin=${originId}&destination=${destId}`)
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    fetch(`${apiUrl}/api/route?origin=${originId}&destination=${destId}`)
       .then(r => r.json())
       .then(data => {
         if (reqId !== routeReqRef.current) return;
