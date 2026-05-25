@@ -393,7 +393,7 @@ async function loadNetwork() {
 // --- Server ---
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
   
   // CORS support
   app.use((req, res, next) => {
