@@ -55,7 +55,16 @@ const cache: {
   stationToLines: Map<number, string[]>;
   error: string | null;
   errorTime: number;
-} = { data: null, graph: null, lineInfoMap: new Map(), stationToLines: new Map(), error: null, errorTime: 0 };
+  loadingPromise: Promise<void> | null;
+} = { 
+  data: null, 
+  graph: null, 
+  lineInfoMap: new Map(), 
+  stationToLines: new Map(), 
+  error: null, 
+  errorTime: 0,
+  loadingPromise: null
+};
 
 const NEGATIVE_CACHE_TTL = 30_000;
 const SNAP_RADIUS_KM = 0.5;
@@ -74,6 +83,7 @@ async function fetchRawData(): Promise<any> {
   const cachePath = path.join(process.cwd(), "nyc-data.json");
   if (fs.existsSync(cachePath)) {
     try {
+      console.log(`Reading local cache from ${cachePath}...`);
       const data = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
       if (data.elements?.length > 0) {
         console.log(`Loaded ${data.elements.length} elements from local cache.`);
@@ -373,21 +383,35 @@ function generateInstructions(pathNodeIds: string[], graph: Graph, lineInfoMap: 
 // --- Load network ---
 async function loadNetwork() {
   if (cache.data && cache.graph) return;
-  if (cache.error && Date.now() - cache.errorTime < NEGATIVE_CACHE_TTL) throw new Error(cache.error);
-  try {
-    const raw = await fetchRawData();
-    const result = buildGraph(raw);
-    cache.data = { stations: result.stations, stats: result.stats };
-    cache.graph = result.graph;
-    cache.lineInfoMap = result.lineInfoMap;
-    cache.stationToLines = result.stationToLines;
-    cache.error = null;
-    console.log(`Network ready: ${result.stats.totalNodes} nodes, ${result.stats.totalEdges} edges, ${result.stations.length} stations, ${result.stats.totalLines} lines.`);
-  } catch (err: any) {
-    cache.error = err.message;
-    cache.errorTime = Date.now();
-    throw err;
+  if (cache.loadingPromise) return cache.loadingPromise;
+
+  if (cache.error && Date.now() - cache.errorTime < NEGATIVE_CACHE_TTL) {
+    throw new Error(cache.error);
   }
+
+  cache.loadingPromise = (async () => {
+    try {
+      console.log("Starting network data load...");
+      const start = Date.now();
+      const raw = await fetchRawData();
+      const result = buildGraph(raw);
+      cache.data = { stations: result.stations, stats: result.stats };
+      cache.graph = result.graph;
+      cache.lineInfoMap = result.lineInfoMap;
+      cache.stationToLines = result.stationToLines;
+      cache.error = null;
+      console.log(`Network ready in ${((Date.now() - start) / 1000).toFixed(1)}s: ${result.stats.totalNodes} nodes, ${result.stats.totalEdges} edges, ${result.stations.length} stations, ${result.stats.totalLines} lines.`);
+    } catch (err: any) {
+      console.error("Network load error:", err.message);
+      cache.error = err.message;
+      cache.errorTime = Date.now();
+      throw err;
+    } finally {
+      cache.loadingPromise = null;
+    }
+  })();
+
+  return cache.loadingPromise;
 }
 
 // --- Server ---
@@ -414,15 +438,18 @@ async function startServer() {
   });
 
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", networkLoaded: !!cache.data });
+    res.json({ status: "ok", networkLoaded: !!cache.data, error: cache.error });
   });
 
   app.get("/api/stations", async (req, res) => {
     try {
-      await loadNetwork();
+      if (!cache.data) {
+        // If not loaded yet, try to trigger load but don't wait forever if it's already loading
+        await loadNetwork();
+      }
       res.json(cache.data);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(503).json({ error: "Network data is still loading or failed: " + error.message });
     }
   });
 
@@ -430,7 +457,14 @@ async function startServer() {
     const origin = req.query.origin as string;
     const dest = req.query.destination as string;
     if (!origin || !dest) return res.status(400).json({ error: "Both origin and destination are required." });
-    if (!cache.graph) return res.status(400).json({ error: "Network not loaded." });
+    
+    try {
+      await loadNetwork();
+    } catch (err: any) {
+      return res.status(503).json({ error: "Network not ready: " + err.message });
+    }
+
+    if (!cache.graph) return res.status(400).json({ error: "Network graph not available." });
 
     const graph = cache.graph;
     if (!graph.hasNode(origin)) return res.status(400).json({ error: `Origin '${origin}' not found.` });
@@ -472,7 +506,11 @@ async function startServer() {
     app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
 
-  app.listen(PORT, "0.0.0.0", () => console.log(`Railmap Server running on http://localhost:${PORT}`));
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Railmap Server running on port ${PORT}`);
+    // Start loading network in the background immediately
+    loadNetwork().catch(err => console.error("Initial network load failed:", err.message));
+  });
 }
 
 startServer();
