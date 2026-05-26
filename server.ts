@@ -1,10 +1,17 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import axios from "axios";
 import Graph from "graphology";
 import { dijkstra } from "graphology-shortest-path";
 import fs from "fs";
+
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("UNHANDLED REJECTION at:", promise, "reason:", reason);
+});
 
 // --- Haversine distance (km) ---
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -495,6 +502,7 @@ async function startServer() {
 
   // Vite dev middleware
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: process.env.DISABLE_HMR !== "true" },
       appType: "spa",
