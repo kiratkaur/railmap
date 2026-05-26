@@ -8,11 +8,11 @@
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "vite build && tsc server.ts --outDir . --module esnext --target esnext --moduleResolution node --allowJs --esModuleInterop --skipLibCheck",
     "preview": "vite preview",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "start": "node --import tsx server.ts"
+    "start": "NODE_ENV=production node server.js"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
