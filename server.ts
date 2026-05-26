@@ -5,6 +5,10 @@ import Graph from "graphology";
 import { dijkstra } from "graphology-shortest-path";
 import fs from "fs";
 
+console.log(">>> SERVER PROCESS STARTING <<<");
+console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("PORT:", process.env.PORT);
+
 process.on("uncaughtException", (err) => {
   console.error("UNCAUGHT EXCEPTION:", err);
 });
@@ -514,7 +518,7 @@ async function startServer() {
     app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, () => {
     console.log(`Railmap Server running on port ${PORT}`);
     // Start loading network in the background immediately
     loadNetwork().catch(err => console.error("Initial network load failed:", err.message));
